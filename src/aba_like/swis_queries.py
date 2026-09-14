@@ -128,11 +128,12 @@ QUERIES: dict[str, QueryBuilder] = {
 
 
 def build_alert_history_query(node_ids_in_clause: str, name_like: str | None) -> str:
-    """Best-effort: native alert (incl. ABA-generated) trigger/reset history for
-    the given nodes, for comparing against this script's own fired events.
-    Uses an explicit JOIN (not a `.` navigation property — confirmed unreliable
-    on this instance's SWIS). Not yet validated against a real lab alert
-    definition; validate with `doctor` or a manual query before trusting it.
+    """Native alert (incl. real ABA) trigger/reset history for the given nodes,
+    for comparing against this script's own fired events. Validated against a
+    live lab ABA alert ("ABA CPU - Anomaly-Based Alerting"): EventType 0 =
+    triggered, 1 = reset; the join key is `AlertObjectID` (not the commonly
+    documented `AlertObjID`), and the object's own node caption is
+    `EntityCaption`, not `RelatedNodeCaption`.
     Bind `@name_like` in the query parameters when `name_like` is not None.
     """
     where = [f"o.RelatedNodeId IN {node_ids_in_clause}"]
@@ -140,9 +141,9 @@ def build_alert_history_query(node_ids_in_clause: str, name_like: str | None) ->
         where.append("ac.Name LIKE @name_like")
     return (
         "SELECT h.TimeStamp, h.EventType, h.Message, o.RelatedNodeId, "
-        "o.RelatedNodeCaption, ac.Name AS AlertName "
+        "o.EntityCaption, ac.Name AS AlertName "
         "FROM Orion.AlertHistory h "
-        "JOIN Orion.AlertObjects o ON o.AlertObjID = h.AlertObjID "
+        "JOIN Orion.AlertObjects o ON o.AlertObjectID = h.AlertObjectID "
         "JOIN Orion.AlertConfigurations ac ON ac.AlertID = o.AlertID "
         f"WHERE {' AND '.join(where)} "
         "AND h.TimeStamp >= @start AND h.TimeStamp < @end "

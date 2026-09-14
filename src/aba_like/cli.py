@@ -171,6 +171,11 @@ def cmd_compare(args: argparse.Namespace) -> int:
     ours = pd.read_csv(scored_path, parse_dates=["timestamp"])
 
     node_ids = [int(x) for x in args.nodes.split(",")]
+    # Native alert history is always node-scoped (RelatedNodeId); restrict to node-type
+    # rows for the requested nodes only. Without this, entity_id collisions between
+    # nodes and interfaces (both are plain small integers) could cross-match, and
+    # fire events from unrelated nodes would pollute the "ours_only" count.
+    ours = ours[(ours["entity_type"] == "node") & (ours["entity_id"].isin(node_ids))]
     client = SwisClient(cfg.swis)
     start = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=cfg.lookback_days)
     end = pd.Timestamp.now(tz="UTC")

@@ -14,7 +14,7 @@ import pandas as pd
 from .swis_client import SwisClient, in_clause
 from .swis_queries import build_alert_history_query
 
-EVENT_TYPE_TRIGGERED = 0  # best-effort assumption; confirm via `doctor`/sample data
+EVENT_TYPE_TRIGGERED = 0  # confirmed against a live "ABA CPU - Anomaly-Based Alerting" alert
 EVENT_TYPE_RESET = 1
 
 
