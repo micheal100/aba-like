@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+config.yaml
+data/*.csv
+*.egg-info/
+backtest_report.md
+backtest_per_entity.csv
+compare_result.csv
