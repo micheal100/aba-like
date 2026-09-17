@@ -43,7 +43,10 @@ def merge_and_purge(
     lookback_days: int,
     now: pd.Timestamp,
 ) -> pd.DataFrame:
-    combined = pd.concat([existing, new_rows], ignore_index=True)
+    # Concatenating with an empty frame changes dtype-inference behavior in future
+    # pandas versions (FutureWarning) — skip it entirely rather than rely on that.
+    frames = [df for df in (existing, new_rows) if not df.empty]
+    combined = pd.concat(frames, ignore_index=True) if frames else existing.copy()
     combined = combined.drop_duplicates(
         subset=["entity_type", "entity_id", "metric_name", "timestamp"], keep="last"
     )
