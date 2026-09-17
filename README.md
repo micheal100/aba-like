@@ -185,6 +185,31 @@ while you're still at ~15 days: raise `alpha`, or temporarily switch
 not distinguishing weekdays from weekends — move back to `weekday_hour` as
 `lookback_days` grows toward 60-90 days, where it'll have plenty of samples.
 
+## Performance and scaling
+
+`score`/`run`'s cost is dominated by `models/seasonal_robust.py`'s per-row
+scan within each (entity, metric) group — measured directly (synthetic
+benchmark, `weekday_hour` slot):
+
+- Scales **linearly with entity count** at a fixed lookback: ~120ms per
+  entity/metric group, regardless of how many groups there are. Confirmed
+  against a real 42-node/51-interface lab (228 groups, 67k rows): `fetch`
+  14s, `score` 30s. Extrapolated: **200 nodes ≈ 75s**; 200 nodes + a future
+  500 virtualization hosts (2,100 groups) ≈ 4-5 min. Comfortably inside an
+  hourly run either way.
+- Scales **quadratically with `lookback_days`** (the per-row scan is
+  O(window size) per row): 15d → 115ms/group, 30d → 520ms/group (~4.5x),
+  60d → 3,390ms/group (~6.5x more). Extrapolated at 200 nodes: **30 days ≈
+  5 min** (still fine), **60 days ≈ 34 min** (cutting it close), **90 days
+  would likely exceed an hourly budget outright** — more so once the
+  500-VM expansion is added on top.
+
+Not an issue at the current target (200 nodes, 15-30 day lookback). If you
+later push toward 60-90 days, revisit `score_history`'s per-row Python loop
+first — replacing it with a proper vectorized rolling computation (grouped by
+slot, rolling over a time window) is a contained, known fix, deliberately not
+done yet since it isn't needed at today's scale.
+
 ## Tests
 
 ```bash
