@@ -135,9 +135,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     else:
         print("No alerts firing this run.")
 
-    client = None
-    if cfg.write_back.enabled and not args.dry_run:
-        client = SwisClient(cfg.swis)
+    # A client is needed even for a dry-run preview: looking up an entity's real
+    # URI to show what *would* be written is a read, not a write.
+    client = SwisClient(cfg.swis)
     write_back.apply_write_back(client, cfg, alerted, dry_run=args.dry_run or not cfg.write_back.enabled)
     return 0
 

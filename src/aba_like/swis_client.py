@@ -6,6 +6,10 @@ ties. Implements only the standard, documented SWIS v3 REST surface:
 Query, Create, Read, Update. This is the normal supported way to read Orion
 data and to set custom property values — it is NOT a write path into any
 internal ABA table or anomaly object.
+
+`update()`'s URL shape was cross-checked against orionsdk-python's own
+swisclient.py (POST straight to the entity's URI, no "/Update/" segment) to
+resolve a write failure this instance's SwisUriParser reported unhelpfully.
 """
 from __future__ import annotations
 
@@ -50,13 +54,37 @@ class SwisClient:
         return resp.json()
 
     def update(self, entity_uri: str, properties: dict[str, Any]) -> None:
-        resp = self._session.post(f"{self._base}/Update/{entity_uri}", json=properties, timeout=60)
+        # No "/Update/" path segment — you POST directly to the entity's own URI
+        # (this matches orionsdk-python's swisclient.py; an earlier version of
+        # this method incorrectly prepended "Update/", which made the server's
+        # own SwisUriParser fail with a confusing "Invalid scheme" error).
+        resp = self._session.post(f"{self._base}/{entity_uri}", json=properties, timeout=60)
         self._raise_for_status(resp)
 
     def read(self, entity_uri: str) -> dict[str, Any]:
         resp = self._session.get(f"{self._base}/{entity_uri}", timeout=60)
         self._raise_for_status(resp)
         return resp.json()
+
+    def get_entity_uri(self, swql_entity: str, id_field: str, entity_id: Any) -> str:
+        """Ask SWIS for an object's own canonical `swis://` URI.
+
+        Querying for it (rather than constructing it from the entity/id
+        namespace ourselves) is what makes this work uniformly for both
+        top-level entities (Orion.Nodes) and entities nested under a parent
+        (Orion.NPM.Interfaces, whose real URI is nested under its owning
+        Orion.Nodes) without this code needing to know each entity's nesting.
+        """
+        rows = self.query(
+            f"SELECT Uri FROM {swql_entity} WHERE {id_field}=@id", {"id": entity_id}
+        )
+        if not rows:
+            raise SwisError(f"No {swql_entity} row found for {id_field}={entity_id}")
+        return rows[0]["Uri"]
+
+    def custom_property_uri(self, swql_entity: str, id_field: str, entity_id: Any) -> str:
+        """URI of an object's CustomProperties row, suitable for `update()`."""
+        return self.get_entity_uri(swql_entity, id_field, entity_id) + "/CustomProperties"
 
     def _raise_for_status(self, resp: requests.Response) -> None:
         if resp.status_code >= 400:
@@ -67,23 +95,6 @@ class SwisClient:
                 pass
             log.debug("SWIS %s error body: %s", resp.status_code, resp.text[:4000])
             raise SwisError(f"SWIS {resp.status_code} for {resp.url}: {message}")
-
-
-def custom_property_uri(swql_entity: str, id_field: str, entity_id: Any) -> str:
-    """Build the SWIS entity URI for an object's CustomProperties row.
-
-    e.g. custom_property_uri("Orion.Nodes", "NodeID", 123)
-         -> "Orion/Orion.NodesCustomProperties/NodeID=123"
-
-    This mirrors the standard pattern used by orionsdk-python's
-    `swis.update('Orion.NodesCustomProperties', nodeid, **props)` and by the
-    SwisPowerShell module already used elsewhere on this host.
-    """
-    if "." not in swql_entity:
-        raise ValueError(f"Unexpected SWQL entity name: {swql_entity}")
-    namespace, base_name = swql_entity.split(".", 1)
-    cp_entity = f"{namespace}.{base_name}CustomProperties"
-    return f"{namespace}/{cp_entity}/{id_field}={entity_id}"
 
 
 def in_clause(values: Iterable[Any]) -> str:

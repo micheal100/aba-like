@@ -5,7 +5,7 @@ Deliberately generic and disabled by default (`write_back.enabled: false`) —
 the real property name doesn't exist yet in SWOSH. This never touches
 internal ABA tables/objects; it only calls the same documented
 Update-a-CustomProperties-row pattern used elsewhere on this host
-(see swis_client.custom_property_uri).
+(see SwisClient.custom_property_uri).
 
 An entity's aggregate state is "anomalous" if ANY of its in-scope metrics are
 currently `active` (fired and not yet recovered) — a node with one alerting
@@ -18,7 +18,7 @@ import logging
 import pandas as pd
 
 from .config import Config
-from .swis_client import SwisClient, custom_property_uri
+from .swis_client import SwisClient
 
 log = logging.getLogger(__name__)
 
@@ -42,14 +42,16 @@ def compute_targets(alerted: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     return targets
 
 
-def apply_write_back(client: SwisClient | None, cfg: Config, alerted: pd.DataFrame, dry_run: bool) -> pd.DataFrame:
+def apply_write_back(client: SwisClient, cfg: Config, alerted: pd.DataFrame, dry_run: bool) -> pd.DataFrame:
+    """`client` is used even in dry-run mode — looking up an entity's real URI
+    is a read, not a write, so dry-run previews still show the exact target."""
     wb = cfg.write_back
     targets = compute_targets(alerted, cfg)
 
     for _, row in targets.iterrows():
         et = cfg.entity_types[row["entity_type"]]
         value = wb.anomaly_value if row["anomalous"] else wb.normal_value
-        uri = custom_property_uri(et.swql_entity, et.id_field, row["entity_id"])
+        uri = client.custom_property_uri(et.swql_entity, et.id_field, row["entity_id"])
         if dry_run or not wb.enabled:
             log.info(
                 "[dry-run] would set %s.%s = %r on %s (%s)%s",
@@ -57,7 +59,6 @@ def apply_write_back(client: SwisClient | None, cfg: Config, alerted: pd.DataFra
                 f" - caused by: {row['causes']}" if row["causes"] else "",
             )
             continue
-        assert client is not None
         client.update(uri, {wb.property_name: value})
         log.info(
             "Set %s.%s = %r on %s%s",
