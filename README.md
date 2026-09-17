@@ -162,10 +162,19 @@ script's fired events against native alert history on those same nodes:
 aba-like compare --config config.yaml --nodes 101,102,103 --alert-name-like "%ABA%"
 ```
 
-This is best-effort (see the caveat in `src/aba_like/swis_queries.py` about
-`Orion.AlertHistory`/`Orion.AlertObjects` field names) and exists only to
-sanity-check this script's behavior — it is not a claim of equivalence to
-SolarWinds' model.
+This writes `compare_result.csv` — designed to be opened directly in Excel/
+Sheets by anyone, not just a developer: plain column headers (`Result`,
+`Node`, `Native ABA Time`, `This Tool's Time`, `Minutes Apart`, `This Tool's
+Reason`...), readable timestamps, and this tool's own plain-English reason
+for firing (or not) alongside each row, so a non-technical reviewer can see
+*why* the two disagreed without reading any code. `Result` is one of "Both
+flagged this", "Native ABA only", or "This tool only".
+
+The `Orion.AlertHistory`/`Orion.AlertObjects` field names this relies on were
+confirmed against a live lab alert (see `src/aba_like/swis_queries.py`), but
+re-run `doctor` before trusting it against a different instance/version. This
+exists only to sanity-check this script's behavior — it is not a claim of
+equivalence to SolarWinds' model.
 
 ## A note on statistical confidence at 15 days
 

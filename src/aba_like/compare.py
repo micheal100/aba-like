@@ -37,6 +37,10 @@ def fetch_native_alert_events(
     return df
 
 
+def _fmt(ts) -> str | None:
+    return None if ts is None or pd.isna(ts) else ts.strftime("%Y-%m-%d %H:%M UTC")
+
+
 def compare_events(
     native: pd.DataFrame, ours: pd.DataFrame, tolerance_minutes: int = 30,
 ) -> pd.DataFrame:
@@ -44,15 +48,22 @@ def compare_events(
     tolerance window, per node. Everything unmatched on either side is
     surfaced so you can judge over/under-triggering, not to score "accuracy"
     against SolarWinds' proprietary model.
+
+    Output columns are named and formatted for someone comparing results in
+    Excel/Sheets, not for further scripting — plain labels, readable
+    timestamps, and this tool's own plain-English `reason` included so a
+    non-developer can see *why* it did or didn't fire without reading code.
     """
     if native.empty:
-        native_triggers = pd.DataFrame(columns=["RelatedNodeId", "TimeStamp", "AlertName"])
+        native_triggers = pd.DataFrame(columns=["RelatedNodeId", "TimeStamp", "AlertName", "EntityCaption"])
     else:
         native_triggers = native[native["EventType"] == EVENT_TYPE_TRIGGERED][
-            ["RelatedNodeId", "TimeStamp", "AlertName"]
+            ["RelatedNodeId", "TimeStamp", "AlertName", "EntityCaption"]
         ].rename(columns={"RelatedNodeId": "entity_id"})
 
-    ours_fired = ours[ours["fire"]][["entity_id", "entity_name", "metric_name", "timestamp", "reason"]]
+    ours_fired = ours[ours["fire"]][
+        ["entity_id", "entity_name", "metric_name", "timestamp", "reason"]
+    ]
 
     tol = pd.Timedelta(minutes=tolerance_minutes)
     rows = []
@@ -66,28 +77,39 @@ def compare_events(
         ]
         if candidates.empty:
             rows.append({
-                "entity_id": nt["entity_id"], "native_time": nt["TimeStamp"],
-                "native_alert": nt["AlertName"], "our_time": None, "our_metric": None,
-                "match": "native_only",
+                "Result": "Native ABA only (this tool did not flag it)",
+                "Node": nt["EntityCaption"], "Node ID": nt["entity_id"],
+                "Native ABA Time": _fmt(nt["TimeStamp"]), "Native Alert Name": nt["AlertName"],
+                "This Tool's Time": None, "This Tool's Metric": None,
+                "Minutes Apart": None, "This Tool's Reason": None,
             })
         else:
             for idx, c in candidates.iterrows():
                 matched_our_idx.add(idx)
+                delta_min = round(abs((c["timestamp"] - nt["TimeStamp"]).total_seconds()) / 60, 1)
                 rows.append({
-                    "entity_id": nt["entity_id"], "native_time": nt["TimeStamp"],
-                    "native_alert": nt["AlertName"], "our_time": c["timestamp"],
-                    "our_metric": c["metric_name"], "match": "matched",
+                    "Result": "Both flagged this",
+                    "Node": nt["EntityCaption"], "Node ID": nt["entity_id"],
+                    "Native ABA Time": _fmt(nt["TimeStamp"]), "Native Alert Name": nt["AlertName"],
+                    "This Tool's Time": _fmt(c["timestamp"]), "This Tool's Metric": c["metric_name"],
+                    "Minutes Apart": delta_min, "This Tool's Reason": c["reason"],
                 })
 
     for idx, c in ours_fired.iterrows():
         if idx not in matched_our_idx:
             rows.append({
-                "entity_id": c["entity_id"], "native_time": None, "native_alert": None,
-                "our_time": c["timestamp"], "our_metric": c["metric_name"], "match": "ours_only",
+                "Result": "This tool only (native ABA did not flag it)",
+                "Node": c["entity_name"], "Node ID": c["entity_id"],
+                "Native ABA Time": None, "Native Alert Name": None,
+                "This Tool's Time": _fmt(c["timestamp"]), "This Tool's Metric": c["metric_name"],
+                "Minutes Apart": None, "This Tool's Reason": c["reason"],
             })
 
-    result = pd.DataFrame(rows)
+    result = pd.DataFrame(rows, columns=[
+        "Result", "Node", "Node ID", "Native ABA Time", "Native Alert Name",
+        "This Tool's Time", "This Tool's Metric", "Minutes Apart", "This Tool's Reason",
+    ])
     if result.empty:
         return result
-    result["sort_key"] = result["native_time"].fillna(result["our_time"])
-    return result.sort_values("sort_key").drop(columns="sort_key")
+    result["_sort_key"] = result["Native ABA Time"].fillna(result["This Tool's Time"])
+    return result.sort_values("_sort_key").drop(columns="_sort_key").reset_index(drop=True)

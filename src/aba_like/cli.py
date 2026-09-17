@@ -195,7 +195,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
     result.to_csv(out_path, index=False)
     print(f"Compared {len(native)} native alert events vs our fired events -> {out_path}")
     if not result.empty:
-        print(result["match"].value_counts().to_string())
+        print(result["Result"].value_counts().to_string())
     return 0
 
 
