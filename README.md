@@ -34,21 +34,20 @@ to read polled metrics and (optionally, later) set a custom property.
 
 ```bash
 python -m venv .venv
-# Windows: .venv\Scripts\activate      Linux/macOS: source .venv/bin/activate
+# PowerShell:  .venv\Scripts\Activate.ps1
+# cmd.exe:     .venv\Scripts\activate.bat
+# bash/WSL:    source .venv/bin/activate
 pip install -e ".[dev]"
 
 cp config.example.yaml config.yaml
-cp .env.example .env   # then set real values in your shell/session, not in a committed file
+cp .env.example .env   # then fill in real SWIS_HOST/SWIS_USER/SWIS_PASSWORD values
 ```
 
-Set the SWIS connection env vars before running anything that talks to
-SolarWinds (see `.env.example`):
-
-```powershell
-$env:SWIS_HOST = "your-lab-orion-host"
-$env:SWIS_USER = "svc-aba-like"
-$env:SWIS_PASSWORD = "..."
-```
+`.env` (gitignored — never commit it) is loaded automatically on every run, from
+whatever directory you run `aba-like` in, or from next to `--config` — no
+`$env:`/`export`/`source` needed, and it works the same in PowerShell, Git
+Bash, WSL, or a Task Scheduler job. A real environment variable (e.g. one set
+by Task Scheduler) always takes precedence over `.env`.
 
 Edit `config.yaml`:
 - `entity_types.node.in_scope_property` / `entity_types.interface.in_scope_property`

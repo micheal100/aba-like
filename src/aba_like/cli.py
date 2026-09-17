@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+from dotenv import load_dotenv
 
 from . import alert_logic, ingest, reporting, store, synthetic, write_back
 from .config import Config, load_config
@@ -25,6 +26,13 @@ for _stream in (sys.stdout, sys.stderr):
 
 
 def _load_cfg(args: argparse.Namespace) -> Config:
+    # Load .env for SWIS_HOST/SWIS_USER/SWIS_PASSWORD so no shell-specific env var
+    # syntax (PowerShell $env:, bash export, etc.) is needed. Never overrides a
+    # variable already set in the real environment (e.g. by Task Scheduler/cron).
+    load_dotenv()  # searches upward from the current working directory
+    config_path = Path(args.config)
+    load_dotenv(config_path.resolve().parent / ".env")  # also try next to --config
+
     cfg = load_config(args.config)
     setup_logging(cfg.logging, verbosity=args.verbose)
     return cfg
