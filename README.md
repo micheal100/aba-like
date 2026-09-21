@@ -9,6 +9,11 @@
 > -- SolarWinds is not liable for damages arising from use of the scripts
 > -- or documentation.
 
+> New here and not a Python/Linux person? Start with **[SETUP_GUIDE.md](SETUP_GUIDE.md)**
+> instead — a plain-language, step-by-step walkthrough for Windows, Ubuntu,
+> and CentOS/RHEL. The rest of this README assumes more familiarity with the
+> tooling.
+
 A customer-owned, NOR-based anomaly detection proof of concept for SWOSH. It
 approximates the *behavior* of SolarWinds Anomaly-Based Alerting (a learned
 "normal operating range" band, evaluated per entity/metric on a seasonal
