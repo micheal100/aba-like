@@ -1,6 +1,15 @@
 # ABA-like config — copy to config.yaml and adjust.
 # This is a customer-owned, NOR-based anomaly detection POC. It is NOT SolarWinds ABA
 # and does not reproduce SolarWinds' cloud AIOps model.
+#
+# -- Scripts are not supported under any SolarWinds support program or service.
+# -- Scripts are provided AS IS without warranty of any kind.
+# -- SolarWinds further disclaims all warranties, including implied warranties
+# -- of merchantability or fitness for a particular purpose.
+# -- The risk arising out of the use or performance of the scripts and
+# -- documentation stays with you.
+# -- SolarWinds is not liable for damages arising from use of the scripts
+# -- or documentation.
 
 # --- Rolling window / model ---------------------------------------------------
 # 15, not 14: with seasonal_slot=weekday_hour (168 buckets/week), a slot only recurs

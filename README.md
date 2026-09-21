@@ -1,5 +1,14 @@
 # aba_like
 
+> -- Scripts are not supported under any SolarWinds support program or service.
+> -- Scripts are provided AS IS without warranty of any kind.
+> -- SolarWinds further disclaims all warranties, including implied warranties
+> -- of merchantability or fitness for a particular purpose.
+> -- The risk arising out of the use or performance of the scripts and
+> -- documentation stays with you.
+> -- SolarWinds is not liable for damages arising from use of the scripts
+> -- or documentation.
+
 A customer-owned, NOR-based anomaly detection proof of concept for SWOSH. It
 approximates the *behavior* of SolarWinds Anomaly-Based Alerting (a learned
 "normal operating range" band, evaluated per entity/metric on a seasonal

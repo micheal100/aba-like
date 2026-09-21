@@ -1,3 +1,4 @@
+"""aba-like command line entry point."""
 from __future__ import annotations
 
 import argparse
@@ -199,6 +200,17 @@ def cmd_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+DISCLAIMER = """\
+-- Scripts are not supported under any SolarWinds support program or service.
+-- Scripts are provided AS IS without warranty of any kind.
+-- SolarWinds further disclaims all warranties, including implied warranties
+-- of merchantability or fitness for a particular purpose.
+-- The risk arising out of the use or performance of the scripts and
+-- documentation stays with you.
+-- SolarWinds is not liable for damages arising from use of the scripts
+-- or documentation."""
+
+
 def build_parser() -> argparse.ArgumentParser:
     # Shared options that work both before and after the subcommand, e.g.
     # `aba-like --config c.yaml score` and `aba-like score --config c.yaml`.
@@ -206,7 +218,10 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--config", default="config.yaml", help="Path to config YAML (default: config.yaml)")
     common.add_argument("-v", "--verbose", action="count", default=0, help="-v for INFO+, -vv for DEBUG")
 
-    p = argparse.ArgumentParser(prog="aba-like", description=__doc__, parents=[common])
+    p = argparse.ArgumentParser(
+        prog="aba-like", description=__doc__, epilog=DISCLAIMER, parents=[common],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sub = p.add_subparsers(dest="command", required=True)
 
     sp = sub.add_parser(
