@@ -1,0 +1,145 @@
+# ABA-like config — copy to config.yaml and adjust.
+# This is a customer-owned, NOR-based anomaly detection POC. It is NOT SolarWinds ABA
+# and does not reproduce SolarWinds' cloud AIOps model.
+#
+# -- Scripts are not supported under any SolarWinds support program or service.
+# -- Scripts are provided AS IS without warranty of any kind.
+# -- SolarWinds further disclaims all warranties, including implied warranties
+# -- of merchantability or fitness for a particular purpose.
+# -- The risk arising out of the use or performance of the scripts and
+# -- documentation stays with you.
+# -- SolarWinds is not liable for damages arising from use of the scripts
+# -- or documentation.
+
+# --- Rolling window / model ---------------------------------------------------
+# 15, not 14: with seasonal_slot=weekday_hour (168 buckets/week), a slot only recurs
+# every 7 days, so min_points=2 needs slightly MORE than 2*7=14 days of window to ever
+# be satisfied — at exactly 14 days, no slot ever reaches 2 prior occurrences (confirmed
+# empirically: 0/9715 rows trained in lab testing at 14 days). 15 gives just enough
+# margin. Raise further later (e.g. 30-90) for more stable per-slot statistics.
+lookback_days: 15
+
+resample:
+  interval: 1h              # bucket raw polled samples into this interval before scoring
+  aggregation: mean          # mean | max | p95
+
+seasonal_slot: weekday_hour  # weekday_hour | hour_only | weekday_only
+# NOTE: at 14 days lookback, weekday_hour gives only ~2 historical samples per slot,
+# which is fine to demonstrate the mechanics but statistically noisy (a MAD/median of 2
+# points swings a lot) — expect some false-positive "anomalies" until you've accumulated
+# more weeks. If that noise is a problem before then, switch this to `hour_only`
+# (24 buckets instead of 168, so 14 days gives ~14 samples/bucket) at the cost of not
+# distinguishing weekdays from weekends; move back to weekday_hour once lookback grows.
+# Minimum historical samples IN THE SAME SLOT before a model is "trained". This is the
+# main knob to revisit as lookback_days grows. A `weekday_hour` slot only recurs once a
+# week, so the max possible samples is roughly lookback_days / 7 — e.g. at 14 days that's
+# ~2, at 30 days ~4, at 90 days ~12. Keep min_points comfortably below that ceiling (2-3
+# for 14-day testing) or nothing will ever train; raise it again once lookback_days grows.
+min_points: 2
+alpha: 3.0                   # NOR half-width, in sigma-equivalent units. Engineering starting
+                              # point, NOT a claimed match to SolarWinds' internal alpha. Try 2 or 3.
+nor_method: robust_mad       # robust_mad (median +/- alpha * 1.4826*MAD; default, resists outliers)
+                              # classic_meanstd (literal mean +/- alpha * standard deviation)
+
+# --- Alert logic ---------------------------------------------------------------
+alert:
+  mode: anomaly_only              # anomaly_only | base_plus_anomaly | base_fallback
+  bound: both                     # upper | lower | both
+  # Default base_threshold, used for any metric below that doesn't set its own
+  # (see `metrics:`) — only meaningful as-is for a 0-100% metric like cpu_load_pct.
+  base_threshold:
+    operator: ">="
+    value: 80
+  fallback_to_base_threshold: true
+  consecutive_breaches: 2
+  recovery_margin: 0.05
+  cooldown_minutes: 60
+  missing_data_policy: ignore     # ignore | warning | trigger
+
+# --- Entity types ----------------------------------------------------------
+# Add new entity types here later (e.g. virtualization hosts) without touching code,
+# as long as the SWQL entity has a corresponding `<Entity>CustomProperties` table
+# joinable on its id_field (e.g. Orion.Nodes -> Orion.NodesCustomProperties).
+entity_types:
+  node:
+    swql_entity: Orion.Nodes
+    id_field: NodeID
+    name_field: Caption
+    in_scope_property: In_scope     # <-- your custom property name, confirmed by you
+    in_scope_value: null            # null = property is boolean, filter on it being true
+                                     # (confirmed boolean on this instance's In_scope/int_in_scope;
+                                     # set an explicit value here, e.g. "Yes", if yours is text-typed)
+  interface:
+    swql_entity: Orion.NPM.Interfaces
+    id_field: InterfaceID
+    name_field: Caption
+    in_scope_property: int_in_scope # <-- your custom property name, confirmed by you
+    in_scope_value: null
+
+# --- Metrics ---------------------------------------------------------------
+# `source` keys map to query builders in aba_like.swis_queries.QUERIES.
+# Field names were validated against a real lab instance with `aba-like doctor`
+# — see the module docstring in src/aba_like/swis_queries.py for what differed
+# from generic Orion documentation. Re-run `doctor` if you point this at a
+# different instance/version before trusting it there too.
+#
+# `base_threshold` per metric overrides `alert.base_threshold` above, since a
+# 0-100% metric and a millisecond/bps metric can't share one number. Tune the
+# example values below for your environment — they're starting points, not
+# validated thresholds.
+metrics:
+  - name: cpu_load_pct
+    entity_type: node
+    source: orion_cpu_load
+    base_threshold: {operator: ">=", value: 80}
+  # memory_used_pct is intentionally not wired up: this instance has no generic
+  # per-node historical memory table (Orion.MemoryUsage doesn't exist; the only
+  # memory history table found, Orion.APM.HistoricalMemory, is keyed by APM
+  # component, not NodeID, and needs the APM module actively monitoring that
+  # component). See README "Memory metric" for options if you want it back.
+  - name: response_time_ms
+    entity_type: node
+    source: orion_response_time
+    base_threshold: {operator: ">=", value: 200}
+  - name: packet_loss_pct
+    entity_type: node
+    source: orion_packet_loss
+    base_threshold: {operator: ">=", value: 5}
+  - name: interface_in_util_pct
+    entity_type: interface
+    source: orion_interface_in_util
+    base_threshold: {operator: ">=", value: 90}
+  - name: interface_out_util_pct
+    entity_type: interface
+    source: orion_interface_out_util
+    base_threshold: {operator: ">=", value: 90}
+
+# --- SWIS connection ---------------------------------------------------------
+# Credentials are never stored in this file — only env var *names* are configured here.
+swis:
+  host_env: SWIS_HOST
+  user_env: SWIS_USER
+  password_env: SWIS_PASSWORD
+  port: 17774
+  verify_ssl: false   # lab uses a self-signed cert; set true (and drop this) for prod
+
+# --- Write-back (long-term; disabled by default) ------------------------------
+# When enabled, the script sets/clears a custom property via SWIS so a standard
+# (non-ABA) SolarWinds alert can trigger off it. Mechanism is generic; rename the
+# property once you've created it in SWOSH.
+write_back:
+  enabled: false
+  entity_types: [node, interface]
+  property_name: ABA_LIKE_ANOMALY   # placeholder — rename to your real custom property
+  anomaly_value: "True"
+  normal_value: ""
+
+# --- Storage -----------------------------------------------------------------
+storage:
+  history_csv: data/history.csv
+  scored_csv: data/scored_latest.csv
+
+# --- Logging -----------------------------------------------------------------
+logging:
+  level: INFO   # DEBUG | INFO | WARNING | ERROR
+  file: null    # e.g. logs/aba_like.log
